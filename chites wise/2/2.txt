@@ -1,0 +1,158 @@
+/*
+Problem Statement: Write a program to implement Parallel Bubble Sort and Merge Sort using OpenMP.
+Use existing algorithms and measure the performance of sequential and parallel algorithms.
+*/
+
+#include <iostream>
+#include <vector>
+#include <omp.h>
+#include <algorithm>
+#include <random>
+
+// Utility function to verify if the array is sorted
+bool isSorted(const std::vector<int>& arr) {
+    return std::is_sorted(arr.begin(), arr.end());
+}
+
+// Sequential Bubble Sort
+void sequentialBubbleSort(std::vector<int>& arr) {
+    int n = arr.size();
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                std::swap(arr[j], arr[j + 1]);
+            }
+        }
+    }
+}
+
+// Parallel Bubble Sort using Odd-Even Transposition
+void parallelBubbleSort(std::vector<int>& arr) {
+    int n = arr.size();
+    bool swapped = true;
+
+    // Note: Bubble Sort is not ideal for parallelism, but we simulate it with odd-even phases
+    while (swapped) {
+        swapped = false;
+
+        #pragma omp parallel for shared(arr)
+        for (int i = 0; i < n - 1; i += 2) {
+            if (arr[i] > arr[i + 1]) {
+                std::swap(arr[i], arr[i + 1]);
+                swapped = true;
+            }
+        }
+
+        #pragma omp parallel for shared(arr)
+        for (int i = 1; i < n - 1; i += 2) {
+            if (arr[i] > arr[i + 1]) {
+                std::swap(arr[i], arr[i + 1]);
+                swapped = true;
+            }
+        }
+    }
+}
+
+// Merge function
+void merge(std::vector<int>& arr, int left, int mid, int right) {
+    std::vector<int> temp(right - left + 1);
+    int i = left, j = mid + 1, k = 0;
+
+    while (i <= mid && j <= right) {
+        if (arr[i] <= arr[j]) temp[k++] = arr[i++];
+        else temp[k++] = arr[j++];
+    }
+
+    while (i <= mid) temp[k++] = arr[i++];
+    while (j <= right) temp[k++] = arr[j++];
+
+    for (i = 0; i < k; i++) {
+        arr[left + i] = temp[i];
+    }
+}
+
+// Sequential Merge Sort
+void sequentialMergeSort(std::vector<int>& arr, int left, int right) {
+    if (left < right) {
+        int mid = left + (right - left) / 2;
+        sequentialMergeSort(arr, left, mid);
+        sequentialMergeSort(arr, mid + 1, right);
+        merge(arr, left, mid, right);
+    }
+}
+
+// Parallel Merge Sort with depth limit
+void parallelMergeSort(std::vector<int>& arr, int left, int right, int depth = 0) {
+    if (left < right) {
+        int mid = left + (right - left) / 2;
+
+        if (depth < 3) {
+            #pragma omp parallel sections
+            {
+                #pragma omp section
+                parallelMergeSort(arr, left, mid, depth + 1);
+                #pragma omp section
+                parallelMergeSort(arr, mid + 1, right, depth + 1);
+            }
+        } else {
+            sequentialMergeSort(arr, left, mid);
+            sequentialMergeSort(arr, mid + 1, right);
+        }
+
+        merge(arr, left, mid, right);
+    }
+}
+
+int main(int argc, char* argv[]) {
+    int SIZE = (argc > 1) ? std::atoi(argv[1]) : 50000;
+    int THREADS = (argc > 2) ? std::atoi(argv[2]) : 4;
+
+    std::vector<int> arr(SIZE);
+
+    // Initialize with random values
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(1, 10000);
+    for (int i = 0; i < SIZE; ++i) {
+        arr[i] = dis(gen);
+    }
+
+    std::vector<int> arr_copy = arr;
+    omp_set_num_threads(THREADS);
+
+    std::cout << "Array Size: " << SIZE << ", Threads: " << THREADS << "\n\n";
+
+    // Sequential Bubble Sort
+    arr = arr_copy;
+    double start = omp_get_wtime();
+    sequentialBubbleSort(arr);
+    double end = omp_get_wtime();
+    std::cout << "Sequential Bubble Sort Time: " << (end - start) * 1000 << " ms\n";
+    std::cout << "Sorted Correctly: " << std::boolalpha << isSorted(arr) << "\n\n";
+
+    // Parallel Bubble Sort
+    arr = arr_copy;
+    start = omp_get_wtime();
+    parallelBubbleSort(arr);
+    end = omp_get_wtime();
+    std::cout << "Parallel Bubble Sort Time: " << (end - start) * 1000 << " ms\n";
+    std::cout << "Sorted Correctly: " << std::boolalpha << isSorted(arr) << "\n\n";
+
+    // Sequential Merge Sort
+    arr = arr_copy;
+    start = omp_get_wtime();
+    sequentialMergeSort(arr, 0, arr.size() - 1);
+    end = omp_get_wtime();
+    std::cout << "Sequential Merge Sort Time: " << (end - start) * 1000 << " ms\n";
+    std::cout << "Sorted Correctly: " << std::boolalpha << isSorted(arr) << "\n\n";
+
+    // Parallel Merge Sort
+    arr = arr_copy;
+    start = omp_get_wtime();
+    parallelMergeSort(arr, 0, arr.size() - 1);
+    end = omp_get_wtime();
+    std::cout << "Parallel Merge Sort Time: " << (end - start) * 1000 << " ms\n";
+    std::cout << "Sorted Correctly: " << std::boolalpha << isSorted(arr) << "\n\n";
+
+    return 0;
+}
